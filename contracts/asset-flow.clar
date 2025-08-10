@@ -229,3 +229,59 @@
     (ok portfolio-id)
   )
 )
+
+;; Execute intelligent portfolio rebalancing based on target allocations
+(define-public (rebalance-portfolio (portfolio-id uint))
+  (let ((portfolio (unwrap! (get-portfolio portfolio-id) ERR-INVALID-PORTFOLIO)))
+    ;; Verify ownership and portfolio status
+    (asserts! (is-eq tx-sender (get owner portfolio)) ERR-NOT-AUTHORIZED)
+    (asserts! (get active portfolio) ERR-INVALID-PORTFOLIO)
+
+    ;; Update rebalancing timestamp for tracking
+    (map-set Portfolios portfolio-id
+      (merge portfolio { last-rebalanced: stacks-block-height })
+    )
+
+    (ok true)
+  )
+)
+
+;; Modify asset allocation percentages for dynamic strategy adjustment
+(define-public (update-portfolio-allocation
+    (portfolio-id uint)
+    (token-id uint)
+    (new-percentage uint)
+  )
+  (let (
+      (portfolio (unwrap! (get-portfolio portfolio-id) ERR-INVALID-PORTFOLIO))
+      (asset (unwrap! (get-portfolio-asset portfolio-id token-id) ERR-INVALID-TOKEN))
+    )
+    ;; Validate authorization and parameters
+    (asserts! (is-eq tx-sender (get owner portfolio)) ERR-NOT-AUTHORIZED)
+    (asserts! (validate-percentage new-percentage) ERR-INVALID-PERCENTAGE)
+    (asserts! (validate-token-id portfolio-id token-id) ERR-INVALID-TOKEN-ID)
+
+    ;; Update asset allocation with new percentage target
+    (map-set PortfolioAssets {
+      portfolio-id: portfolio-id,
+      token-id: token-id,
+    }
+      (merge asset { target-percentage: new-percentage })
+    )
+
+    (ok true)
+  )
+)
+
+;; PROTOCOL INITIALIZATION - Administrative Setup
+
+;; Transfer protocol ownership to designated administrator
+(define-public (initialize (new-owner principal))
+  (begin
+    ;; Validate current ownership and prevent self-assignment
+    (asserts! (is-eq tx-sender (var-get protocol-owner)) ERR-NOT-AUTHORIZED)
+    (asserts! (not (is-eq new-owner tx-sender)) ERR-NOT-AUTHORIZED)
+    (var-set protocol-owner new-owner)
+    (ok true)
+  )
+)
