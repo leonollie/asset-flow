@@ -97,7 +97,7 @@
     (ok {
       portfolio-id: portfolio-id,
       total-value: total-value,
-      needs-rebalance: (> (- stacks-stacks-block-height (get last-rebalanced portfolio)) u144), ;; 24-hour cycle
+      needs-rebalance: (> (- stacks-block-height (get last-rebalanced portfolio)) u144), ;; 24-hour cycle
     })
   )
 )
