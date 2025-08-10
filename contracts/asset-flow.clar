@@ -71,3 +71,83 @@
 (define-read-only (get-portfolio (portfolio-id uint))
   (map-get? Portfolios portfolio-id)
 )
+
+;; Fetch specific asset allocation within a portfolio
+(define-read-only (get-portfolio-asset
+    (portfolio-id uint)
+    (token-id uint)
+  )
+  (map-get? PortfolioAssets {
+    portfolio-id: portfolio-id,
+    token-id: token-id,
+  })
+)
+
+;; Get all portfolios owned by a specific user
+(define-read-only (get-user-portfolios (user principal))
+  (default-to (list) (map-get? UserPortfolios user))
+)
+
+;; Calculate rebalancing requirements and timing analysis
+(define-read-only (calculate-rebalance-amounts (portfolio-id uint))
+  (let (
+      (portfolio (unwrap! (get-portfolio portfolio-id) ERR-INVALID-PORTFOLIO))
+      (total-value (get total-value portfolio))
+    )
+    (ok {
+      portfolio-id: portfolio-id,
+      total-value: total-value,
+      needs-rebalance: (> (- stacks-stacks-block-height (get last-rebalanced portfolio)) u144), ;; 24-hour cycle
+    })
+  )
+)
+
+;; PRIVATE FUNCTIONS - Internal Logic Engine
+
+;; Validate token identifier within portfolio constraints
+(define-private (validate-token-id
+    (portfolio-id uint)
+    (token-id uint)
+  )
+  (let ((portfolio (unwrap! (get-portfolio portfolio-id) false)))
+    (and
+      (< token-id MAX-TOKENS-PER-PORTFOLIO)
+      (< token-id (get token-count portfolio))
+      true
+    )
+  )
+)
+
+;; Ensure percentage allocation remains within valid bounds
+(define-private (validate-percentage (percentage uint))
+  (and (>= percentage u0) (<= percentage BASIS-POINTS))
+)
+
+;; Comprehensive validation of portfolio allocation percentages
+(define-private (validate-portfolio-percentages (percentages (list 10 uint)))
+  (fold check-percentage-sum percentages true)
+)
+
+;; Iterative percentage validation helper function
+(define-private (check-percentage-sum
+    (current-percentage uint)
+    (valid bool)
+  )
+  (and valid (validate-percentage current-percentage))
+)
+
+;; Append new portfolio to user's ownership registry
+(define-private (add-to-user-portfolios
+    (user principal)
+    (portfolio-id uint)
+  )
+  (let (
+      (current-portfolios (get-user-portfolios user))
+      (new-portfolios (unwrap! (as-max-len? (append current-portfolios portfolio-id) u20)
+        ERR-USER-STORAGE-FAILED
+      ))
+    )
+    (map-set UserPortfolios user new-portfolios)
+    (ok true)
+  )
+)
